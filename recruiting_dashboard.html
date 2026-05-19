@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Recruiting Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f3; color: #1a1a1a; }
+
+  /* Gender toggle at top */
+  .gender-bar { background: #1a1a2e; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .gender-bar h1 { color: #fff; font-size: 16px; font-weight: 600; }
+  .gender-toggle { display: flex; background: rgba(255,255,255,0.12); border-radius: 999px; padding: 3px; gap: 2px; }
+  .gender-btn { cursor: pointer; padding: 6px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; border: none; background: transparent; color: rgba(255,255,255,0.7); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: all 0.2s; }
+  .gender-btn.active { background: #fff; color: #1a1a2e; }
+
+  .content { padding: 1rem; }
+
+  /* Division tabs */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; overflow-x: auto; padding-bottom: 2px; }
+  .tab-btn { cursor: pointer; padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; border: 1px solid #ccc; background: #fff; color: #555; white-space: nowrap; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .tab-btn.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+
+  /* Metrics */
+  .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 1rem; }
+  .metric { background: #fff; border-radius: 10px; padding: 12px; text-align: center; border: 1px solid #e8e8e8; }
+  .metric-label { font-size: 11px; color: #888; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .metric-val { font-size: 24px; font-weight: 700; }
+
+  /* Chart */
+  .chart-wrap { position: relative; width: 100%; margin-bottom: 1rem; background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 12px; }
+
+  /* Team cards */
+  .section-label { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 8px; }
+  .cards-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+  .team-card { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+  .team-card-left { flex: 1; min-width: 0; }
+  .team-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .team-bar-wrap { margin-top: 8px; background: #f0f0ee; border-radius: 999px; height: 6px; overflow: hidden; }
+  .team-bar { height: 6px; border-radius: 999px; }
+  .team-card-right { text-align: right; flex-shrink: 0; }
+  .rate-big { font-size: 22px; font-weight: 700; }
+  .spots-label { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* Coach cards */
+  .coach-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 1.5rem; }
+  .coach-card { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 12px; }
+  .coach-name { font-size: 13px; font-weight: 600; }
+  .coach-rate { font-size: 22px; font-weight: 700; margin: 4px 0 2px; }
+  .coach-detail { font-size: 11px; color: #888; }
+
+  @media (min-width: 500px) {
+    .metrics { grid-template-columns: repeat(4, 1fr); }
+    .coach-cards { grid-template-columns: repeat(3, 1fr); }
+    .content { padding: 1.5rem; }
+  }
+  @media (min-width: 700px) {
+    .coach-cards { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="gender-bar">
+  <h1>Recruiting</h1>
+  <div class="gender-toggle">
+    <button class="gender-btn active" onclick="switchGender('boys')">Boys</button>
+    <button class="gender-btn" onclick="switchGender('girls')">Girls</button>
+  </div>
+</div>
+
+<div class="content">
+  <div class="tabs" id="tabs"></div>
+  <div class="metrics" id="metrics"></div>
+  <div class="chart-wrap" id="chartWrap"><canvas id="mainChart" role="img" aria-label="Close rates by team"></canvas></div>
+  <div class="section-label">Teams</div>
+  <div class="cards-list" id="cardsList"></div>
+  <div class="section-label">By coach</div>
+  <div class="coach-cards" id="coachCards"></div>
+</div>
+
+<script>
+const BOYS = [
+  { team:'U13B ECNL',         coach:'Randy',    signed:13, open:5,  div:'ECNL' },
+  { team:'U14B ECNL',         coach:'Randy',    signed:15, open:3,  div:'ECNL' },
+  { team:'U15B ECNL',         coach:'Carlos',   signed:11, open:7,  div:'ECNL' },
+  { team:'U16B ECNL',         coach:'Jason',    signed:13, open:5,  div:'ECNL' },
+  { team:'U17B ECNL',         coach:'Carlos',   signed:10, open:8,  div:'ECNL' },
+  { team:'U19B ECNL',         coach:'Jason',    signed:15, open:3,  div:'ECNL' },
+  { team:'U13B ECNL-RL',      coach:'Cole',     signed:16, open:2,  div:'ECNL-RL' },
+  { team:'U14B ECNL-RL',      coach:'Geronimo', signed:18, open:0,  div:'ECNL-RL' },
+  { team:'U15B ECNL-RL',      coach:'Cole',     signed:12, open:6,  div:'ECNL-RL' },
+  { team:'U16B ECNL-RL',      coach:'Cole',     signed:12, open:6,  div:'ECNL-RL' },
+  { team:'U17B ECNL-RL',      coach:'Nacho',    signed:16, open:2,  div:'ECNL-RL' },
+  { team:'U19B ECNL-RL',      coach:'Nacho',    signed:12, open:6,  div:'ECNL-RL' },
+  { team:'U10B PreECNL Gold', coach:'Geronimo', signed:11, open:0,  div:'Select' },
+  { team:'U10B PreECNL Red',  coach:'Nicos',    signed:11, open:0,  div:'Select' },
+  { team:'U10B White',        coach:'Nicos',    signed:9,  open:2,  div:'Select' },
+  { team:'U11B PreECNL Gold', coach:'Kai',      signed:15, open:0,  div:'Select' },
+  { team:'U11B PreECNL Red',  coach:'Ricardo',  signed:14, open:0,  div:'Select' },
+  { team:'U11B White',        coach:'Oscar',    signed:5,  open:8,  div:'Select' },
+  { team:'U11B Blue',         coach:'Alex',     signed:11, open:2,  div:'Select' },
+  { team:'U12B PreECNL Gold', coach:'Kai',      signed:15, open:0,  div:'Select' },
+  { team:'U12B PreECNL Red',  coach:'Ricardo',  signed:13, open:0,  div:'Select' },
+  { team:'U12B Blue',         coach:'Mahntie',  signed:1,  open:12, div:'Select' },
+  { team:'U12B White',        coach:'Mahntie',  signed:12, open:1,  div:'Select' },
+  { team:'U12B North',        coach:'Oscar',    signed:1,  open:12, div:'Select' },
+  { team:'U13B Red',          coach:'Luke',     signed:14, open:4,  div:'Select' },
+  { team:'U14B Red',          coach:'Luke',     signed:12, open:6,  div:'Select' },
+  { team:'U16B Red',          coach:'Oscar',    signed:4,  open:14, div:'Select' },
+  { team:'U17B Red',          coach:'Dylan',    signed:0,  open:18, div:'Select' },
+  { team:'U19B Red',          coach:'Dylan',    signed:1,  open:17, div:'Select' },
+  { team:'U13B White',        coach:'Ricardo',  signed:1,  open:17, div:'Select' },
+].map(d => ({ ...d, roster: d.signed + d.open, rate: d.signed + d.open === 0 ? 0 : Math.round(d.signed / (d.signed + d.open) * 100) }));
+
+const GIRLS = [
+  { team:'U19G GA',         coach:'Roberto',  signed:18, open:0, div:'GA' },
+  { team:'U17G GA',         coach:'Roberto',  signed:18, open:0, div:'GA' },
+  { team:'U16G GA',         coach:'Fernando', signed:18, open:0, div:'GA' },
+  { team:'U15G GA',         coach:'Fernando', signed:17, open:1, div:'GA' },
+  { team:'U14G GA',         coach:'Ashley',   signed:18, open:0, div:'GA' },
+  { team:'U13G GA',         coach:'Roberto',  signed:16, open:2, div:'GA' },
+  { team:'U19G GA Aspire',  coach:'Max',      signed:18, open:0, div:'GA Aspire' },
+  { team:'U17G GA Aspire',  coach:'Max',      signed:18, open:0, div:'GA Aspire' },
+  { team:'U16G GA Aspire',  coach:'Beto',     signed:18, open:0, div:'GA Aspire' },
+  { team:'U15G GA Aspire',  coach:'Beto',     signed:18, open:0, div:'GA Aspire' },
+  { team:'U14G GA Aspire',  coach:'Pete',     signed:17, open:1, div:'GA Aspire' },
+  { team:'U13G GA Aspire',  coach:'Pete',     signed:18, open:0, div:'GA Aspire' },
+  { team:'U12G PreGA White',coach:'Sean',     signed:13, open:5, div:'Select' },
+  { team:'U12G PreGA Red',  coach:'Kristine', signed:15, open:3, div:'Select' },
+  { team:'U11G PreGA White',coach:'Sean',     signed:12, open:1, div:'Select' },
+  { team:'U11G PreGA Red',  coach:'Kristine', signed:13, open:0, div:'Select' },
+  { team:'U12G Blue',       coach:'Andy',     signed:9,  open:4, div:'Select' },
+  { team:'U13G Blue',       coach:'Mahntie',  signed:12, open:6, div:'Select' },
+  { team:'U14G Red',        coach:'Clifton',  signed:14, open:4, div:'Select' },
+  { team:'U15G Red',        coach:'Andy',     signed:19, open:0, div:'Select' },
+  { team:'U17G Red',        coach:'Jesus',    signed:11, open:7, div:'Select' },
+].map(d => ({ ...d, roster: d.signed + d.open, rate: d.signed + d.open === 0 ? 0 : Math.round(d.signed / (d.signed + d.open) * 100) }));
+
+const BOYS_DIVS  = ['All', 'ECNL', 'ECNL-RL', 'Select'];
+const GIRLS_DIVS = ['All', 'GA', 'GA Aspire', 'Select'];
+
+const BOYS_DIV_COLOR  = { 'ECNL':'#185FA5', 'ECNL-RL':'#1D9E75', 'Select':'#C2410C' };
+const GIRLS_DIV_COLOR = { 'GA':'#7C3AED', 'GA Aspire':'#B45309', 'Select':'#0369A1' };
+
+let currentGender = 'boys';
+let currentTab    = 'All';
+let chartInstance = null;
+
+function divColor(div) {
+  return currentGender === 'boys'
+    ? (BOYS_DIV_COLOR[div]  || '#555')
+    : (GIRLS_DIV_COLOR[div] || '#555');
+}
+
+function rateColor(r) {
+  if (r >= 80) return '#16a34a';
+  if (r >= 60) return '#2563eb';
+  return '#dc2626';
+}
+
+function switchGender(g) {
+  currentGender = g;
+  currentTab = 'All';
+  document.querySelectorAll('.gender-btn').forEach(b => b.classList.toggle('active', b.textContent.trim().toLowerCase() === g));
+  render();
+}
+
+function switchTab(t) {
+  currentTab = t;
+  render();
+}
+
+function render() {
+  const allData = currentGender === 'boys' ? BOYS : GIRLS;
+  const divs    = currentGender === 'boys' ? BOYS_DIVS : GIRLS_DIVS;
+
+  // Tabs
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = '';
+  divs.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (d === currentTab ? ' active' : '');
+    btn.textContent = d;
+    btn.onclick = () => switchTab(d);
+    tabsEl.appendChild(btn);
+  });
+
+  const data = currentTab === 'All' ? allData : allData.filter(d => d.div === currentTab);
+
+  const totalSigned = data.reduce((a,d) => a + d.signed, 0);
+  const totalRoster = data.reduce((a,d) => a + d.roster, 0);
+  const totalOpen   = data.reduce((a,d) => a + d.open, 0);
+  const overall     = totalRoster === 0 ? 0 : Math.round(totalSigned / totalRoster * 100);
+
+  document.getElementById('metrics').innerHTML = `
+    <div class="metric"><div class="metric-label">Close rate</div><div class="metric-val" style="color:${rateColor(overall)}">${overall}%</div></div>
+    <div class="metric"><div class="metric-label">Signed</div><div class="metric-val">${totalSigned}</div></div>
+    <div class="metric"><div class="metric-label">Roster</div><div class="metric-val">${totalRoster}</div></div>
+    <div class="metric"><div class="metric-label">Open</div><div class="metric-val">${totalOpen}</div></div>
+  `;
+
+  // Chart
+  const chartH = Math.max(200, data.length * 24 + 50);
+  document.getElementById('chartWrap').style.height = (chartH + 24) + 'px';
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  chartInstance = new Chart(document.getElementById('mainChart'), {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.team),
+      datasets: [{ data: data.map(d => d.rate), backgroundColor: data.map(d => divColor(d.div)), borderRadius: 3 }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => {
+          const d = data[ctx.dataIndex];
+          return [`${d.rate}% (${d.signed}/${d.roster})`, `${d.open} open`];
+        }}}
+      },
+      scales: {
+        x: { min:0, max:100, ticks:{ callback: v => v+'%', stepSize:25, font:{ size:11 } }, grid:{ color:'rgba(0,0,0,0.06)' } },
+        y: { grid:{ display:false }, ticks:{ font:{ size:11 }, autoSkip:false } }
+      }
+    }
+  });
+
+  // Team cards sorted by rate desc
+  const cardsList = document.getElementById('cardsList');
+  cardsList.innerHTML = '';
+  [...data].sort((a,b) => b.rate - a.rate).forEach(d => {
+    cardsList.innerHTML += `
+      <div class="team-card">
+        <div class="team-card-left">
+          <div class="team-name">${d.team}</div>
+          <div class="team-meta">${d.coach} &nbsp;|&nbsp; ${d.signed}/${d.roster} signed &nbsp;|&nbsp; ${d.open} open</div>
+          <div class="team-bar-wrap"><div class="team-bar" style="width:${d.rate}%;background:${divColor(d.div)};"></div></div>
+        </div>
+        <div class="team-card-right">
+          <div class="rate-big" style="color:${rateColor(d.rate)}">${d.rate}%</div>
+          <div class="spots-label">${d.open} left</div>
+        </div>
+      </div>`;
+  });
+
+  // Coach cards
+  const coaches = {};
+  data.forEach(d => {
+    if (!coaches[d.coach]) coaches[d.coach] = { signed:0, roster:0, open:0 };
+    coaches[d.coach].signed += d.signed;
+    coaches[d.coach].roster += d.roster;
+    coaches[d.coach].open   += d.open;
+  });
+
+  document.getElementById('coachCards').innerHTML = '';
+  Object.entries(coaches)
+    .sort((a,b) => (b[1].signed/b[1].roster) - (a[1].signed/a[1].roster))
+    .forEach(([name, rec]) => {
+      const r = rec.roster === 0 ? 0 : Math.round(rec.signed / rec.roster * 100);
+      document.getElementById('coachCards').innerHTML += `
+        <div class="coach-card">
+          <div class="coach-name">${name}</div>
+          <div class="coach-rate" style="color:${rateColor(r)}">${r}%</div>
+          <div class="coach-detail">${rec.signed} signed &bull; ${rec.open} open</div>
+        </div>`;
+    });
+}
+
+render();
+</script>
+</body>
+</html>
